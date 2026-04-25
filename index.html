@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大学排课系统 (V1.0)</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #0f172a; --secondary: #64748b; --accent: #3b82f6; --accent-hover: #2563eb;
+            --bg-page: #f1f5f9; --bg-card: #ffffff; --border: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+            --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: var(--bg-page); color: var(--primary); max-width: 1300px; margin: 0 auto; padding: 25px; line-height: 1.6;}
+        input, select, textarea { font-family: inherit; }
+        
+        .card { background: var(--bg-card); padding: 30px; border-radius: 16px; box-shadow: var(--shadow-md); margin-bottom: 30px; border: 1px solid #f8fafc; transition: box-shadow 0.3s ease; }
+        .card:hover { box-shadow: var(--shadow-lg); }
+        
+        .form-group { margin-bottom: 18px; position: relative; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #475569; letter-spacing: 0.5px;}
+        input[type="text"], input[type="time"], input[type="number"], select, input[type="file"] { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; font-size: 14px; outline: none; background-color: #f8fafc; transition: all 0.2s ease;}
+        input:focus, select:focus { border-color: var(--accent); background-color: #ffffff; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        
+        .row { display: flex; gap: 20px; flex-wrap: wrap; }
+        .row > div { flex: 1; min-width: 180px; }
+        
+        button { background-color: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 6px;}
+        button:hover { opacity: 0.95; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1);}
+        button:active { transform: translateY(0); box-shadow: none; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        button.primary { background-color: var(--accent); }
+        button.danger { background-color: #ef4444; color: white; }
+        button.success { background-color: #10b981; }
+        button.warning { background-color: #f59e0b; color: white; }
+        button.secondary { background-color: var(--secondary); }
+        button.outline { background-color: transparent; border: 1px solid var(--border); color: var(--primary); }
+        button.outline:hover { background-color: #f8fafc; border-color: #cbd5e1; }
+        
+        #mainPage { display: none; }
+        #setupPage { max-width: 800px; margin: 40px auto; }
+        
+        .import-box { background-color: #eff6ff; border: 2px dashed #93c5fd; padding: 25px; border-radius: 12px; margin-bottom: 25px; text-align: center; transition: background 0.3s;}
+        .import-box:hover { background-color: #e0f2fe; }
+        .recovery-box { background-color: #f0fdf4; border: 2px dashed #22c55e; padding: 20px; border-radius: 12px; margin-bottom: 25px; text-align: center; display: none; }
+
+        table.list-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        table.list-table th, table.list-table td { border-bottom: 1px solid var(--border); padding: 14px 10px; text-align: left; vertical-align: middle; }
+        table.list-table tr:hover td { background-color: #f8fafc; }
+        
+        .timetable-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #ffffff; padding: 15px 25px; border-radius: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); flex-wrap: wrap; gap: 15px;}
+        
+        .suggestions-box { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); z-index: 1000; max-height: 200px; overflow-y: auto; display: none; margin-top: 6px; padding: 4px; }
+        .suggestion-item { padding: 10px 14px; cursor: pointer; font-size: 13.5px; color: var(--primary); border-radius: 6px; }
+        .suggestion-item:hover { background: #eff6ff; color: var(--accent); font-weight: 500; }
+
+        .capture-wrapper { background: #f8fafc; padding: 30px; border-radius: 16px; border: 1px solid var(--border); position: relative;}
+        .capture-content { padding: 40px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
+        .academic-title { text-align: center; color: #0f172a; font-family: 'Times New Roman', Times, serif; font-size: 28px; font-weight: bold; margin-bottom: 6px; letter-spacing: 0.5px;}
+        .academic-sub { text-align: center; color: #64748b; font-size: 15px; margin-bottom: 25px; font-family: 'Times New Roman', Times, serif; display: flex; justify-content: center; align-items: center; gap: 10px;}
+        
+        .week-tag-badge { background: #fdf4ff; color: #a21caf; padding: 3px 10px; border-radius: 12px; font-size: 13px; font-weight: bold; border: 1px solid #f5d0fe; font-family: -apple-system, Arial, sans-serif; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}
+
+        .visual-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; font-family: -apple-system, Arial, sans-serif; user-select: none; background: white;}
+        /* 核心修复5: 居中对齐 vertical-align: middle */
+        .visual-table th, .visual-table td { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 10px; vertical-align: middle; height: 85px; transition: background-color 0.2s, box-shadow 0.2s;}
+        .visual-table th { background-color: #f8fafc; text-align: center; padding: 14px 8px; color: #334155; font-weight: 600; border-bottom: 2px solid #e2e8f0;}
+        .visual-table .time-col { width: 95px; text-align: center; font-weight: 600; background: #f8fafc; color: #475569; }
+        
+        .today-highlight { background-color: #fefce8 !important; }
+        .visual-table td:hover { background-color: #f1f5f9; cursor: pointer; }
+        .visual-table td.drag-over { background-color: #e0f2fe !important; box-shadow: inset 0 0 0 2px #3b82f6; transition: all 0.1s;}
+
+        .cell-item { position: relative; margin-bottom: 8px; padding: 10px 12px; border-radius: 8px; background: #fff; box-shadow: var(--shadow-sm); cursor: grab; transition: all 0.2s ease; border: 1px solid transparent;}
+        /* 核心修复5: 消除最后一项底部间距，保证绝对居中 */
+        .cell-item:last-child { margin-bottom: 0; }
+        .cell-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: rgba(0,0,0,0.05);}
+        .cell-item:active { cursor: grabbing; transform: scale(0.98); opacity: 0.9;}
+        .cell-item.locked { cursor: not-allowed; opacity: 0.95; }
+        .cell-item.locked:hover { transform: none; box-shadow: var(--shadow-sm); }
+        .cell-item b { font-size: 13.5px; display: block; margin-bottom: 4px; line-height: 1.3;}
+        .cell-item small { color: #64748b; font-size: 11.5px; display: flex; align-items: center; gap: 4px; }
+        .lock-icon { position: absolute; top: 6px; right: 8px; font-size: 11px; opacity: 0.6; }
+        .selected { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+        .custom-calendar { border: 1px solid var(--border); padding: 18px; background: #fff; width: 300px; border-radius: 12px; box-sizing: border-box; box-shadow: var(--shadow-md);}
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: 13px; margin-top: 12px;}
+        .cal-day { padding: 8px 0; cursor: pointer; border-radius: 6px; font-weight: 500; transition: all 0.15s;}
+        .cal-day:hover { background: #f1f5f9; color: var(--accent);}
+        .cal-day.selected { background: var(--accent); color: white; font-weight: bold; box-shadow: 0 2px 6px rgba(59,130,246,0.3);}
+        .cal-day.holiday { color: #cbd5e1; pointer-events: none; text-decoration: line-through; }
+        .date-badge { display: inline-flex; align-items: center; background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; margin: 3px; font-size: 12.5px; border: 1px solid var(--border); font-weight: 500;}
+
+        /* 编辑弹窗样式 (Modal) */
+        #editModalOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9998; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .edit-modal { background: white; width: 100%; max-width: 650px; border-radius: 16px; box-shadow: var(--shadow-modal); overflow: hidden; animation: modalFadeIn 0.2s ease-out; }
+        .edit-modal-header { background: #f8fafc; padding: 18px 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;}
+        .edit-modal-body { padding: 25px; max-height: 75vh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+        @keyframes modalFadeIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); backdrop-filter: blur(4px); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { border: 4px solid #e2e8f0; border-top: 4px solid var(--accent); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .date-input { cursor: pointer; background-image: url('data:image/svg+xml;utf8,<svg fill="%2394a3b8" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg>'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px; padding-right: 40px !important;}
+        
+        .card-scroll { overflow-y: auto; max-height: 650px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+    </style>
+</head>
+<body>
+
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <h3 id="loadingText" style="color:#1e293b; font-weight: 600;">正在处理数据...</h3>
+    </div>
+
+    <div id="datePickerPopup" class="custom-calendar" style="display:none; position:absolute; z-index:10000;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold; color: #1e293b;">
+            <button type="button" class="outline" style="padding:6px 10px; border:none; background:#f1f5f9;" onclick="dpChangeMonth(-1)">◀</button>
+            <span id="dpLabel" style="font-size: 15px;">2026 / 04</span>
+            <button type="button" class="outline" style="padding:6px 10px; border:none; background:#f1f5f9;" onclick="dpChangeMonth(1)">▶</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(7,1fr); text-align:center; font-size:12.5px; color:#64748b; font-weight:bold; margin-bottom: 8px;">
+            <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+        </div>
+        <div class="cal-grid" id="dpGrid"></div>
+    </div>
+
+    <div id="setupPage" class="card">
+        <h2 style="text-align: center; margin-bottom: 25px; color: #0f172a;">🎓 大学排课系统设置</h2>
+        
+        <div class="recovery-box" id="recoveryBox">
+            <p style="margin: 0 0 12px 0; font-weight: 600; color: #166534; font-size: 15px;">🛡️ 检测到上次有未保存的进度</p>
+            <button class="success" onclick="restoreLocal()">一键恢复进度</button>
+            <button class="outline" style="margin-left:10px;" onclick="document.getElementById('recoveryBox').style.display='none'">忽略并新建</button>
+        </div>
+
+        <div class="import-box">
+            <p style="margin: 0 0 12px 0; font-weight: 600; color: #1d4ed8; font-size: 15px;">🔄 导入已有 .ICS 自动还原配置与课程</p>
+            <input type="file" id="icsImport" accept=".ics" style="background: white; border: 1px solid #93c5fd;">
+        </div>
+
+        <div class="row">
+            <div class="form-group" style="flex: 2;"><label>学校名称</label><input type="text" id="cfgUni" value="TU Dresden"></div>
+            <div class="form-group"><label>年份</label><input type="number" id="cfgYear" value="2026"></div>
+            <div class="form-group"><label>学期</label><select id="cfgSemester"><option value="Sommersemester">夏学期 (SoSe)</option><option value="Wintersemester">冬学期 (WiSe)</option></select></div>
+        </div>
+
+        <div class="row">
+            <div class="form-group"><label>学期开始</label><input type="text" class="date-input" id="cfgStart" readonly onclick="openDatePicker(this)" placeholder="YYYY-MM-DD" required></div>
+            <div class="form-group"><label>学期结束</label><input type="text" class="date-input" id="cfgEnd" readonly onclick="openDatePicker(this)" placeholder="YYYY-MM-DD" required></div>
+            <div class="form-group"><label>第一周规则</label><select id="cfgFirstWeek"><option value="odd">单周 (1. Woche)</option><option value="even">双周 (2. Woche)</option></select></div>
+        </div>
+
+        <div class="row">
+            <div class="form-group"><label>总课时数 (DS)</label><input type="number" id="cfgPeriods" value="6"></div>
+            <div class="form-group"><label>1.DS 开始时间</label><input type="time" id="cfgStartTime" value="07:30"></div>
+            <div class="form-group"><label>每课时长 (min)</label><input type="number" id="cfgDuration" value="90"></div>
+            <div class="form-group"><label>休息时长 (min)</label><input type="number" id="cfgBreak" value="20"></div>
+        </div>
+
+        <div class="row" style="align-items: center; background: #f8fafc; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <div class="form-group" style="flex: 2; margin: 0;">
+                <label>🌍 时区选择 (ICS导出用)</label>
+                <select id="cfgTz" style="background: white;">
+                    <optgroup label="欧洲 (Europe)">
+                        <option value="Europe/London">伦敦 (Europe/London, UTC+0)</option>
+                        <option value="Europe/Berlin" selected>柏林/巴黎 (Europe/Berlin, UTC+1)</option>
+                        <option value="Europe/Rome">罗马 (Europe/Rome, UTC+1)</option>
+                        <option value="Europe/Moscow">莫斯科 (Europe/Moscow, UTC+3)</option>
+                    </optgroup>
+                    <optgroup label="亚洲 (Asia)">
+                        <option value="Asia/Shanghai">北京/上海 (Asia/Shanghai, UTC+8)</option>
+                        <option value="Asia/Hong_Kong">香港 (Asia/Hong_Kong, UTC+8)</option>
+                        <option value="Asia/Tokyo">东京 (Asia/Tokyo, UTC+9)</option>
+                        <option value="Asia/Seoul">首尔 (Asia/Seoul, UTC+9)</option>
+                        <option value="Asia/Singapore">新加坡 (Asia/Singapore, UTC+8)</option>
+                        <option value="Asia/Dubai">迪拜 (Asia/Dubai, UTC+4)</option>
+                    </optgroup>
+                    <optgroup label="美洲 (America)">
+                        <option value="America/New_York">纽约 (America/New_York, UTC-5)</option>
+                        <option value="America/Chicago">芝加哥 (America/Chicago, UTC-6)</option>
+                        <option value="America/Denver">丹佛 (America/Denver, UTC-7)</option>
+                        <option value="America/Los_Angeles">洛杉矶 (America/Los_Angeles, UTC-8)</option>
+                        <option value="America/Toronto">多伦多 (America/Toronto, UTC-5)</option>
+                        <option value="America/Sao_Paulo">圣保罗 (America/Sao_Paulo, UTC-3)</option>
+                    </optgroup>
+                    <optgroup label="大洋洲 (Australia & Pacific)">
+                        <option value="Australia/Sydney">悉尼 (Australia/Sydney, UTC+10)</option>
+                        <option value="Australia/Melbourne">墨尔本 (Australia/Melbourne, UTC+10)</option>
+                        <option value="Australia/Perth">珀斯 (Australia/Perth, UTC+8)</option>
+                        <option value="Pacific/Auckland">奥克兰 (Pacific/Auckland, UTC+12)</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 1; margin: 0; display: flex; align-items: center; justify-content: flex-end;">
+                <label style="cursor:pointer; display:flex; align-items:center; color:#0f172a; font-weight: bold; margin:0;">
+                    <input type="checkbox" id="cfgWeekend" style="width:18px; height:18px; margin-right:8px; accent-color: var(--accent);"> 包含周末排课
+                </label>
+            </div>
+        </div>
+
+        <div>
+            <h4 style="margin: 20px 0 10px 0; color:#b91c1c; border-bottom:2px solid #fee2e2; padding-bottom:8px;">🏖️ 公共假期</h4>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" class="date-input" id="holDate" readonly onclick="openDatePicker(this)" placeholder="YYYY-MM-DD" style="max-width: 200px;">
+                <input type="text" id="holRemark" placeholder="备注 (如: Pfingsten)" style="flex:1;">
+                <button type="button" class="secondary" onclick="addHoliday()">添加假期</button>
+            </div>
+            <div id="holidayList" style="margin-top:10px; min-height:30px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+        </div>
+
+        <button onclick="startApp()" class="primary" style="margin-top: 30px; width: 100%; font-size: 16px; padding: 14px; box-shadow: 0 4px 12px rgba(59,130,246,0.3);">进入排课系统 ▶</button>
+    </div>
+
+    <div id="editModalOverlay">
+        <div class="edit-modal">
+            <div class="edit-modal-header">
+                <h3 style="margin:0; font-size:18px; color:#0f172a; display:flex; align-items:center; gap:8px;" id="modalTitleText"><span>✏️</span> 快速编辑课程</h3>
+                <button class="outline" style="border:none; padding:4px 8px; font-size:16px; background:#f1f5f9;" onclick="closeEditModal()">✖</button>
+            </div>
+            <div class="edit-modal-body" id="modalFormContainer">
+                </div>
+        </div>
+    </div>
+
+    <div id="mainPage">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px;">
+            <h2 id="mainTitle" style="margin: 0; color: #0f172a; font-weight: 800; font-size: 26px;">📅 排课系统</h2>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size: 13px; color: #64748b; background: #e2e8f0; padding: 4px 10px; border-radius: 6px;">💡 提示: Ctrl+Z 可撤销</span>
+                <button class="outline" onclick="backToSetup()" style="background: white;">⚙️ 返回配置</button>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="card" style="flex: 2;" id="leftFormCard">
+                <h3 style="margin-top:0; margin-bottom: 20px; font-size: 18px; display: flex; align-items: center; gap: 8px;" id="leftCardTitle"><span>📝</span> 添加新课程</h3>
+                
+                <form id="courseForm">
+                    <input type="hidden" id="cEditId">
+                    <div class="row">
+                        <div class="form-group" style="flex: 2;">
+                            <label>课程名称 *</label>
+                            <input type="text" id="cName" required autocomplete="off" oninput="showSug('cName')" onfocus="showSug('cName')" onblur="hideSug('cName')">
+                            <div id="cName_sug" class="suggestions-box"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>授课老师</label>
+                            <input type="text" id="cTeacher" autocomplete="off" oninput="showSug('cTeacher')" onfocus="showSug('cTeacher')" onblur="hideSug('cTeacher')">
+                            <div id="cTeacher_sug" class="suggestions-box"></div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="form-group">
+                            <label>类型</label>
+                            <select id="cTypeSelect">
+                                <option value="V">V (Vorlesung)</option>
+                                <option value="Ü">Ü (Übung)</option>
+                                <option value="P">P (Praktikum)</option>
+                                <option value="S">S (Seminar)</option>
+                                <option value="custom">-- 自定义 --</option>
+                            </select>
+                            <input type="text" id="cTypeCustom" placeholder="输入自定义类型" style="display: none; margin-top: 8px;">
+                        </div>
+                        <div class="form-group">
+                            <label>地点</label>
+                            <input type="text" id="cLocation" autocomplete="off" oninput="showSug('cLocation')" onfocus="showSug('cLocation')" onblur="hideSug('cLocation')">
+                            <div id="cLocation_sug" class="suggestions-box"></div>
+                        </div>
+                        <div class="form-group"><label>时间段</label><select id="cTime" onchange="toggleCustomTime(this.value)"></select></div>
+                    </div>
+
+                    <div class="row" id="customTimeFields" style="display: none; background: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #cbd5e1; margin-bottom:18px;">
+                        <div class="form-group" style="margin:0;"><label>开始时间</label><input type="time" id="cTimeS" style="background: white;"></div>
+                        <div class="form-group" style="margin:0;"><label>结束时间</label><input type="time" id="cTimeE" style="background: white;"></div>
+                    </div>
+
+                    <div style="background: #fffbeb; padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f59e0b; box-shadow: 0 1px 3px rgba(245,158,11,0.1);">
+                        <label style="cursor:pointer; display:flex; align-items:center; margin:0; font-size:14px; color:#92400e; font-weight: 600;">
+                            <input type="checkbox" id="cIsSpec" style="width:18px; height:18px; margin-right:10px; accent-color: #d97706;" onchange="toggleDateMode()"> 
+                            无规律排课：需在日历手动选定特定日期 (Sondertermine)
+                        </label>
+                    </div>
+
+                    <div class="row" id="regSet">
+                        <div class="form-group">
+                            <label>星期</label>
+                            <select id="cDay">
+                                <option value="1">周一 (Mo)</option><option value="2">周二 (Di)</option><option value="3">周三 (Mi)</option>
+                                <option value="4">周四 (Do)</option><option value="5">周五 (Fr)</option>
+                                <option value="6" id="optSa" style="display:none;">周六 (Sa)</option><option value="7" id="optSo" style="display:none;">周日 (So)</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>循环规则</label><select id="cWeek"><option value="every">每周</option><option value="odd">单周 (Ungerade)</option><option value="even">双周 (Gerade)</option></select></div>
+                    </div>
+
+                    <div id="specSet" style="display: none; margin-bottom: 25px;">
+                        <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+                            <div class="custom-calendar" style="border-color: #bfdbfe; box-shadow: none;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-weight:bold;">
+                                    <button type="button" class="outline" style="padding:4px 10px; border:none; background:#eff6ff; color:#2563eb;" onclick="changeMonth(-1)">◀</button>
+                                    <span id="calLabel" style="color:#1e40af;">2026/04</span>
+                                    <button type="button" class="outline" style="padding:4px 10px; border:none; background:#eff6ff; color:#2563eb;" onclick="changeMonth(1)">▶</button>
+                                </div>
+                                <div style="display: grid; grid-template-columns: repeat(7,1fr); text-align:center; font-size:12px; color:#60a5fa; font-weight:bold;">
+                                    <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+                                </div>
+                                <div class="cal-grid" id="calGrid"></div>
+                            </div>
+                            <div id="selDates" style="font-size:13.5px; color:#475569; flex:1; background:#f8fafc; padding:20px; border-radius:12px; border:1px solid #e2e8f0; min-height: 120px; display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start;">尚未选择</div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:12px; margin-top:15px;">
+                        <button type="submit" class="primary" style="flex:1; padding: 14px; font-size: 15px;" id="btnSaveCourse">📥 保存课程</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card card-scroll" style="flex: 1; min-width: 400px;">
+                <h3 style="margin-top:0; margin-bottom: 15px; font-size: 18px; display: flex; align-items: center; justify-content: space-between;">
+                    <span>📂 管理列表</span>
+                    <select id="sortSelect" onchange="renderCourseList()" style="padding: 6px 10px; font-size: 12.5px; width: auto; background: #f1f5f9; border:none; font-weight: 500;">
+                        <option value="time">按时间排序</option>
+                        <option value="name">按名称排序</option>
+                    </select>
+                </h3>
+                <table class="list-table">
+                    <tbody id="manageBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top:0; margin-bottom: 20px; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                <span>📊 可视化课表</span>
+                <span style="font-weight:normal; font-size:13px; color:#64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 6px;">选中按 Delete 删 | 空白双击建课 | 拖拽换时 | 课程双击改</span>
+            </h3>
+            
+            <div class="timetable-controls">
+                <div style="display:flex; gap: 8px;">
+                    <button class="outline" onclick="jumpToWeek(0)" title="跳至第一周">⏮️ 首周</button>
+                    <button class="outline" onclick="navWeek(-1)">◀ 上一周</button>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+                    <select id="weekJumpSelect" onchange="jumpToWeek(this.value)" style="width: auto; padding: 8px 12px; border-radius: 8px; font-weight: 600; background: #f8fafc; border-color: #cbd5e1;"></select>
+                    <button class="warning" style="padding: 8px 16px; box-shadow:none;" onclick="goToCurrentWeek()">📍 本周</button>
+                    <button class="outline" style="padding: 8px 16px; color:#c026d3; border-color:#f0abfc; background:#fdf4ff;" onclick="promptWeekTag()">🏷️ 标记本周</button>
+                    <button class="secondary" style="padding: 8px 16px;" onclick="copyWeekToNext()">➡️ 复制本周到下周</button>
+                </div>
+                <div style="display:flex; gap: 8px;">
+                    <button class="outline" onclick="navWeek(1)">下一周 ▶</button>
+                    <button class="outline" onclick="jumpToWeek(semWeeks.length - 1)" title="跳至最后一周">末周 ⏭️</button>
+                </div>
+            </div>
+            
+            <div class="capture-wrapper" id="pngCaptureArea">
+                <div class="capture-content">
+                    <div class="academic-title" id="pdfBigTitle">Studienjahresablaufplan</div>
+                    <div class="academic-sub" id="pdfWeekSub">KW 1 | 1. Woche</div>
+                    <table class="visual-table" id="visualTable">
+                        <thead><tr id="gridHead"><th>Zeit</th></tr></thead>
+                        <tbody id="gridBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="row" style="margin-top:30px;">
+                <div style="flex:1; display:flex; gap:10px;">
+                    <button class="success" onclick="exportImage('current')" style="flex:1; padding: 14px;">🖼️ 导出 PNG (本周)</button>
+                    <button class="success" onclick="exportImage('all')" style="flex:1; padding: 14px; background-color: #059669;">📦 导出 PNG (所有周)</button>
+                </div>
+                <div style="flex:1; display:flex; gap:10px;">
+                    <button class="primary" onclick="exportPDF('current')" style="flex:1; padding: 14px;">📄 导出 PDF (本周)</button>
+                    <button class="primary" onclick="exportPDF('all')" style="flex:1; padding: 14px; background-color: #1d4ed8;">📄 导出 PDF (所有周)</button>
+                </div>
+                <button class="warning" onclick="exportICS()" style="flex:1; padding: 14px; background-color: #7c3aed;">💾 导出 .ICS (日历备份)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const VERSION = "3.6.0";
+        let cfg = { weekTags: {} }, dsTimes = {}, courses = [], holidays = [];
+        let currWeekIdx = 0, semWeeks = [], calDate = new Date(), selDates = new Set();
+        let memory = { cName: new Set(), cTeacher: new Set(), cLocation: new Set() };
+        let historyStack = [];
+        let selectedCourseId = null;
+
+        let dpTargetInput = null;
+        let dpDate = new Date();
+
+        function generateUUID() {
+            if (crypto && crypto.randomUUID) return crypto.randomUUID();
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        function parseDateSafe(str, format = "YYYY-MM-DD") {
+            if(!str) return null;
+            const tokens = { YYYY: "(\\d{4})", MM: "(\\d{1,2})", DD: "(\\d{1,2})" };
+            let regexStr = format;
+            for (const t in tokens) regexStr = regexStr.replace(t, tokens[t]);
+            const regex = new RegExp("^" + regexStr + "$");
+            const match = str.match(regex);
+            if (!match) return null;
+            const map = {}; let i = 1;
+            for (const t of ["YYYY", "MM", "DD"]) { if (format.includes(t)) map[t] = Number(match[i++]); }
+            const y = map.YYYY, m = map.MM - 1, d = map.DD;
+            const date = new Date(y, m, d);
+            if (date.getFullYear() !== y || date.getMonth() !== m || date.getDate() !== d) return null;
+            return date;
+        }
+
+        function getWeekStart(dateStr) {
+            let d = parseDateSafe(dateStr);
+            if(!d) return null;
+            let day = d.getDay() || 7;
+            d.setDate(d.getDate() - day + 1);
+            return d;
+        }
+
+        function parseTime(t){
+            if(!/^\d{1,2}:\d{2}$/.test(t)) return null;
+            let [h,m] = t.split(':').map(Number);
+            return h*60+m;
+        }
+
+        // ================= Date Picker =================
+        function openDatePicker(inputEl) {
+            dpTargetInput = inputEl; let rect = inputEl.getBoundingClientRect(); let popup = document.getElementById('datePickerPopup');
+            popup.style.display = 'block'; popup.style.top = (window.scrollY + rect.bottom + 5) + 'px'; popup.style.left = (window.scrollX + rect.left) + 'px';
+            if (inputEl.value) { let parts = inputEl.value.split('-'); if(parts.length === 3) dpDate = new Date(parts[0], parts[1]-1, parts[2]); } else { dpDate = new Date(); }
+            renderDatePicker(); setTimeout(() => { document.addEventListener('mousedown', closeDatePicker); }, 10);
+        }
+        function closeDatePicker(e) {
+            let popup = document.getElementById('datePickerPopup');
+            if (!popup.contains(e.target) && e.target !== dpTargetInput) { popup.style.display = 'none'; document.removeEventListener('mousedown', closeDatePicker); }
+        }
+        function dpChangeMonth(v) { dpDate.setMonth(dpDate.getMonth() + v); renderDatePicker(); }
+        function renderDatePicker() {
+            let y = dpDate.getFullYear(), m = dpDate.getMonth(); document.getElementById('dpLabel').innerText = `${y} / ${(m+1).toString().padStart(2,'0')}`;
+            let grid = document.getElementById('dpGrid'); grid.innerHTML = '';
+            let f = (new Date(y,m,1).getDay()||7)-1; let total = new Date(y,m+1,0).getDate();
+            for(let i=0; i<f; i++) grid.innerHTML += '<div></div>';
+            let selDateStr = dpTargetInput && dpTargetInput.value ? dpTargetInput.value : '';
+            for(let d=1; d<=total; d++) {
+                let s = `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                let div = document.createElement('div'); div.className = 'cal-day' + (selDateStr === s ? ' selected' : ''); div.innerText = d;
+                div.onclick = () => { 
+                    dpTargetInput.value = s; 
+                    // 核心修复3: 必须准确获取 DOM 防止 ReferenceError
+                    document.getElementById('datePickerPopup').style.display = 'none'; 
+                    document.removeEventListener('mousedown', closeDatePicker); 
+                };
+                grid.appendChild(div);
+            }
+        }
+
+        function getStrDate(d) { return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`; }
+        function getStrShort(d) { return `${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getDate().toString().padStart(2,'0')}`; }
+
+        const modernColors = [{ bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' }, { bg: '#f0fdf4', border: '#22c55e', text: '#166534' }, { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' }, { bg: '#fdf4ff', border: '#d946ef', text: '#86198f' }, { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' }, { bg: '#f0fdfa', border: '#14b8a6', text: '#115e59' }, { bg: '#faf5ff', border: '#a855f7', text: '#6b21a8' }];
+        function getCourseColor(name) {
+            let hash = 0; for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            return modernColors[Math.abs(hash) % modernColors.length];
+        }
+
+        // ================= Core & State =================
+        function pushHistory() { historyStack.push(JSON.stringify(courses)); if(historyStack.length > 20) historyStack.shift(); saveLocal(); }
+        function undo() { if(historyStack.length <= 1) return; historyStack.pop(); courses = JSON.parse(historyStack[historyStack.length - 1]); renderAll(); saveLocal(); }
+        document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); } if (e.key === 'Delete' && selectedCourseId !== null) { delCourse(selectedCourseId); } });
+
+        function saveLocal() { localStorage.setItem("schedule", JSON.stringify({cfg, courses, holidays, version: VERSION})); }
+        function restoreLocal() {
+            let data = JSON.parse(localStorage.getItem("schedule"));
+            if(data) { loadStateToUI(data); document.getElementById('recoveryBox').style.display = 'none'; alert("✅ 恢复成功！"); }
+        }
+
+        function loadStateToUI(d) {
+            document.getElementById('cfgUni').value = d.cfg.uni; document.getElementById('cfgYear').value = d.cfg.year; document.getElementById('cfgSemester').value = d.cfg.sem; 
+            document.getElementById('cfgStart').value = d.cfg.start; document.getElementById('cfgEnd').value = d.cfg.end;
+            document.getElementById('cfgPeriods').value = d.cfg.dsCount; document.getElementById('cfgStartTime').value = d.cfg.t0; document.getElementById('cfgTz').value = d.cfg.tz || "Europe/Berlin";
+            document.getElementById('cfgFirstWeek').value = d.cfg.firstW; if(d.cfg.showWeekend) document.getElementById('cfgWeekend').checked = true;
+            
+            cfg.weekTags = d.cfg.weekTags || {};
+            courses = d.courses || []; holidays = d.holidays || []; courses.forEach(c => { if(c.isLocked === undefined) c.isLocked = false; });
+            historyStack = []; pushHistory(); renderHolidays(); updateMemory();
+        }
+
+        window.onload = () => {
+            if(localStorage.getItem("schedule")) document.getElementById('recoveryBox').style.display = 'block';
+            document.getElementById('cTypeSelect').addEventListener('change', function() { document.getElementById('cTypeCustom').style.display = (this.value === 'custom') ? 'block' : 'none'; });
+        };
+        function backToSetup() { document.getElementById('mainPage').style.display = 'none'; document.getElementById('setupPage').style.display = 'block'; }
+
+        function addHoliday() {
+            let d = document.getElementById('holDate').value, r = document.getElementById('holRemark').value || '假期';
+            if(d && !holidays.some(h=>h.date===d)) { holidays.push({date: d, remark: r}); renderHolidays(); saveLocal(); }
+            document.getElementById('holDate').value = ''; document.getElementById('holRemark').value = '';
+        }
+        function renderHolidays() {
+            let list = document.getElementById('holidayList');
+            if(!holidays.length) list.innerHTML = '<span style="color:#94a3b8; padding:5px 0;">暂无假期</span>';
+            else list.innerHTML = holidays.map((h,i)=>`<span class="date-badge">🏖️ ${h.date} (${h.remark}) <b onclick="holidays.splice(${i},1);renderHolidays();saveLocal()" style="color:#ef4444;cursor:pointer;margin-left:6px;font-size:14px;">×</b></span>`).join('');
+        }
+
+        function promptWeekTag() {
+            if(!semWeeks.length) return;
+            let w = semWeeks[currWeekIdx];
+            let currentTag = cfg.weekTags[w.idx] || '';
+            let newTag = prompt(`为第 ${w.idx} 周 (KW ${w.idx}) 添加标签/备注：\n(例如: 考试周，讲座周。留空则清除已有标记)`, currentTag);
+            if (newTag !== null) {
+                if (newTag.trim() === '') delete cfg.weekTags[w.idx];
+                else cfg.weekTags[w.idx] = newTag.trim();
+                saveLocal(); renderVisualGrid();
+            }
+        }
+
+        function startApp() {
+            let sDate = document.getElementById('cfgStart').value, eDate = document.getElementById('cfgEnd').value;
+            if(!sDate || !eDate) return alert("❌ 必须填写学期起止时间！");
+            let startD = getWeekStart(sDate); let endD = parseDateSafe(eDate);
+            if(!startD || !endD) return alert("❌ 日期格式解析错误！");
+
+            cfg.uni = document.getElementById('cfgUni').value; cfg.year = document.getElementById('cfgYear').value; cfg.sem = document.getElementById('cfgSemester').value; 
+            cfg.start = sDate; cfg.end = eDate; cfg.firstW = document.getElementById('cfgFirstWeek').value; 
+            cfg.dsCount = parseInt(document.getElementById('cfgPeriods').value); cfg.t0 = document.getElementById('cfgStartTime').value; 
+            cfg.dur = parseInt(document.getElementById('cfgDuration').value); cfg.brk = parseInt(document.getElementById('cfgBreak').value); 
+            cfg.tz = document.getElementById('cfgTz').value; cfg.showWeekend = document.getElementById('cfgWeekend').checked;
+            cfg.startObj = startD; cfg.endObj = endD;
+
+            document.getElementById('optSa').style.display = cfg.showWeekend ? 'block' : 'none'; document.getElementById('optSo').style.display = cfg.showWeekend ? 'block' : 'none';
+
+            initDS(); initWeeks();
+            document.getElementById('setupPage').style.display = 'none'; document.getElementById('mainPage').style.display = 'block';
+            document.getElementById('mainTitle').innerText = cfg.uni + " 教务系统";
+            
+            if(historyStack.length===0) pushHistory(); goToCurrentWeek(); renderAll(); updateMemory();
+        }
+
+        function initDS() {
+            dsTimes = {}; let m = parseTime(cfg.t0); if(m === null) { m = 450; }
+            let s = document.getElementById('cTime'); s.innerHTML = '';
+            for(let i=1; i<=cfg.dsCount; i++) {
+                dsTimes[i] = { s: fmtM(m), e: fmtM(m+cfg.dur), sMin: m, eMin: m+cfg.dur };
+                s.innerHTML += `<option value="${i}">${i}. DS (${dsTimes[i].s}-${dsTimes[i].e})</option>`;
+                m += cfg.dur + cfg.brk;
+            }
+            s.innerHTML += `<option value="custom">⭐ 自定义特定时段</option>`;
+        }
+        function fmtM(m) { return `${Math.floor(m/60).toString().padStart(2,'0')}:${(m%60).toString().padStart(2,'0')}`; }
+
+        function initWeeks() {
+            semWeeks = []; let c = new Date(cfg.startObj), i = 0; let jumpSel = document.getElementById('weekJumpSelect'); jumpSel.innerHTML = '';
+            while(c <= cfg.endObj) {
+                let ws = new Date(c), we = new Date(c); we.setDate(we.getDate()+(cfg.showWeekend?6:4));
+                let isO = (cfg.firstW === 'odd') ? (i%2===0) : (i%2!==0);
+                semWeeks.push({startStr: getStrDate(ws), endStr: getStrDate(we), startObj: ws, endObj: we, isOdd: isO, idx: i+1});
+                jumpSel.innerHTML += `<option value="${i}">KW ${i+1} (${getStrShort(ws)})</option>`;
+                c.setDate(c.getDate()+7); i++;
+            }
+        }
+
+        function navWeek(v) { currWeekIdx = Math.max(0, Math.min(semWeeks.length-1, currWeekIdx+v)); syncNav(); renderVisualGrid(); }
+        function jumpToWeek(idx) { currWeekIdx = parseInt(idx); syncNav(); renderVisualGrid(); }
+        function syncNav() { document.getElementById('weekJumpSelect').value = currWeekIdx; }
+        function goToCurrentWeek() {
+            let nowStr = getStrDate(new Date()); let targetIdx = 0;
+            for(let i=0; i<semWeeks.length; i++) { let endFull = new Date(semWeeks[i].startObj); endFull.setDate(endFull.getDate()+6); if(nowStr >= semWeeks[i].startStr && nowStr <= getStrDate(endFull)) { targetIdx = i; break; } }
+            if(nowStr < semWeeks[0].startStr) targetIdx = 0;
+            currWeekIdx = targetIdx; syncNav(); renderVisualGrid();
+        }
+
+        function updateMemory() {
+            memory.cName.clear(); memory.cTeacher.clear(); memory.cLocation.clear();
+            courses.forEach(c => { if(c.name) memory.cName.add(c.name); if(c.teacher) memory.cTeacher.add(c.teacher); if(c.loc) memory.cLocation.add(c.loc); });
+        }
+        function showSug(id) {
+            let val = document.getElementById(id).value.toLowerCase(); let box = document.getElementById(id + '_sug');
+            if (!val) { box.style.display = 'none'; return; }
+            let matches = Array.from(memory[id]).filter(i => i.toLowerCase().includes(val) && i.toLowerCase() !== val);
+            if (matches.length > 0) { box.innerHTML = matches.map(m => `<div class="suggestion-item" onmousedown="selectSug('${id}', '${m.replace(/'/g, "\\'")}')">${m}</div>`).join(''); box.style.display = 'block'; } 
+            else box.style.display = 'none';
+        }
+        function hideSug(id) { setTimeout(() => { document.getElementById(id + '_sug').style.display = 'none'; }, 150); }
+        function selectSug(id, val) { document.getElementById(id).value = val; document.getElementById(id + '_sug').style.display = 'none'; }
+
+        function toggleCustomTime(v) { document.getElementById('customTimeFields').style.display = (v==='custom'?'flex':'none'); }
+        function toggleDateMode() { 
+            let spec = document.getElementById('cIsSpec').checked;
+            document.getElementById('regSet').style.display = spec ? 'none' : 'flex'; document.getElementById('specSet').style.display = spec ? 'block' : 'none';
+            if(spec) { calDate = new Date(cfg.startObj); renderCal(); }
+        }
+
+        // ================= Modal Form Engine =================
+        function openEditModal(titleHtml, btnHtml) {
+            document.getElementById('modalTitleText').innerHTML = titleHtml;
+            let form = document.getElementById('courseForm');
+            document.getElementById('modalFormContainer').appendChild(form);
+            document.getElementById('btnSaveCourse').innerHTML = btnHtml;
+            document.getElementById('editModalOverlay').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModalOverlay').style.display = 'none';
+            let form = document.getElementById('courseForm');
+            document.getElementById('leftFormCard').appendChild(form);
+            document.getElementById('btnSaveCourse').innerHTML = "📥 保存课程";
+            resetForm();
+        }
+
+        document.getElementById('courseForm').addEventListener('submit', (e)=>{
+            e.preventDefault();
+            let id = document.getElementById('cEditId').value;
+            let typeS = document.getElementById('cTypeSelect').value;
+            let item = {
+                id: id ? id : generateUUID(), 
+                name: document.getElementById('cName').value.trim(), 
+                teacher: document.getElementById('cTeacher').value.trim(), 
+                loc: document.getElementById('cLocation').value.trim(),
+                tMode: document.getElementById('cTime').value, isSpec: document.getElementById('cIsSpec').checked, 
+                type: typeS === 'custom' ? document.getElementById('cTypeCustom').value.trim() : typeS, exdates: [], isLocked: false
+            };
+            if(item.tMode==='custom') {
+                item.ts = document.getElementById('cTimeS').value; item.te = document.getElementById('cTimeE').value; 
+                if(!item.ts || !item.te) return alert("❌ 请填写完整的自定义时间！");
+            }
+            if(item.isSpec) {
+                if(selDates.size===0) return alert("❌ 请在日历中选择特定日期！"); item.dates = Array.from(selDates);
+            } else { item.day = parseInt(document.getElementById('cDay').value); item.rule = document.getElementById('cWeek').value; }
+
+            if(id) { 
+                let old = courses.find(x=>String(x.id) === String(item.id)); 
+                if(old) { item.exdates = old.exdates; item.isLocked = old.isLocked; } 
+                courses = courses.map(x=>String(x.id) === String(item.id) ? item : x); 
+            } else { courses.push(item); }
+            
+            // 如果是在 Modal 里保存，直接关闭
+            if(document.getElementById('editModalOverlay').style.display === 'flex') {
+                closeEditModal();
+            } else {
+                resetForm();
+            }
+            
+            pushHistory(); renderAll(); updateMemory();
+        });
+
+        function resetForm() {
+            document.getElementById('courseForm').reset(); document.getElementById('cEditId').value = '';
+            toggleCustomTime('1'); document.getElementById('cIsSpec').checked=false; toggleDateMode(); selDates.clear(); document.getElementById('cTypeCustom').style.display = 'none';
+        }
+
+        // 核心修复1: 统一使用 Modal 进行编辑
+        function editCourse(id) {
+            let c = courses.find(x=>String(x.id) === String(id)); if(!c) return;
+            if(c.isLocked) return alert("🔒 该课程已被锁定，无法修改！请先在列表中解锁。");
+            
+            openEditModal('<span>✏️</span> 快速编辑课程', '💾 保存修改');
+            
+            document.getElementById('cEditId').value = c.id; document.getElementById('cName').value = c.name;
+            document.getElementById('cTeacher').value = c.teacher; document.getElementById('cLocation').value = c.loc;
+            
+            let selType = document.getElementById('cTypeSelect');
+            if(Array.from(selType.options).some(o=>o.value===c.type)) { selType.value = c.type; document.getElementById('cTypeCustom').style.display = 'none'; }
+            else { selType.value = 'custom'; document.getElementById('cTypeCustom').style.display = 'block'; document.getElementById('cTypeCustom').value = c.type; }
+
+            document.getElementById('cTime').value = c.tMode; toggleCustomTime(c.tMode);
+            if(c.tMode==='custom') { document.getElementById('cTimeS').value = c.ts; document.getElementById('cTimeE').value = c.te; }
+            document.getElementById('cIsSpec').checked = c.isSpec; toggleDateMode();
+            if(c.isSpec) { selDates = new Set(c.dates); renderCal(); } else { document.getElementById('cDay').value = c.day; document.getElementById('cWeek').value = c.rule; }
+        }
+
+        // 核心修复1: 统一使用 Modal 进行建课（双击格子）
+        function quickAddCourse(dateStr, dsIdx, dayNum) {
+            resetForm();
+            document.getElementById('cTime').value = dsIdx.toString();
+            document.getElementById('cDay').value = dayNum.toString();
+            document.getElementById('cIsSpec').checked = false;
+            toggleDateMode();
+            
+            openEditModal('<span>✨</span> 快速建课', '📥 保存课程');
+            setTimeout(() => document.getElementById('cName').focus(), 100);
+        }
+        
+        function duplicateCourse(id) {
+            let orig = courses.find(c=>String(c.id) === String(id)); if(!orig) return;
+            let copy = JSON.parse(JSON.stringify(orig)); copy.id = generateUUID(); copy.exdates = []; copy.isLocked = false;
+            courses.push(copy); pushHistory(); renderAll(); updateMemory(); editCourse(copy.id);
+        }
+
+        function delCourse(id) { 
+            let c = courses.find(x=>String(x.id) === String(id)); 
+            if(c && c.isLocked) return alert("🔒 该课程已被锁定，无法删除！请先在列表中解锁。");
+            if(confirm("确定删除这门课吗？")) { 
+                courses = courses.filter(c => String(c.id) !== String(id)); 
+                if (String(selectedCourseId) === String(id)) selectedCourseId = null;
+                pushHistory(); renderAll(); updateMemory(); 
+            } 
+        }
+
+        function toggleLock(id) { let c = courses.find(x => String(x.id) === String(id)); if(c) { c.isLocked = !c.isLocked; pushHistory(); renderAll(); } }
+
+        function renderCourseList() {
+            let b = document.getElementById('manageBody'); b.innerHTML = '';
+            let sortType = document.getElementById('sortSelect').value;
+            if (courses.length === 0) { b.innerHTML = `<tr><td colspan="2" style="text-align:center; padding: 40px 0; color: #94a3b8;">暂无课程数据，请在左侧添加</td></tr>`; return; }
+
+            let sorted = [...courses].sort((a,b) => {
+                if(sortType === 'name') return a.name.localeCompare(b.name);
+                if(a.isSpec && !b.isSpec) return 1; if(!a.isSpec && b.isSpec) return -1;
+                if(!a.isSpec && !b.isSpec) { if(a.day !== b.day) return a.day - b.day; return (a.tMode === 'custom' ? 99 : a.tMode) - (b.tMode === 'custom' ? 99 : b.tMode); }
+                return 0;
+            });
+
+            sorted.forEach(c => {
+                let color = getCourseColor(c.name);
+                b.innerHTML += `<tr>
+                    <td><b style="color:${color.text}; font-size:14px;">${c.name}</b> <span style="color:#64748b; font-size:12px;">(${c.type})</span></td>
+                    <td style="text-align:right; width: 280px;">
+                        <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center;">
+                            <button class="${c.isLocked ? 'warning' : 'outline'}" style="padding:6px 10px; font-size:12px; margin:0;" onclick="toggleLock('${c.id}')">${c.isLocked ? '🔒 已锁' : '🔓 锁定'}</button>
+                            <button class="outline" style="padding:6px 10px; font-size:12px; margin:0;" onclick="duplicateCourse('${c.id}')">📄 复制</button>
+                            <button class="outline" style="padding:6px 10px; font-size:12px; margin:0;" onclick="editCourse('${c.id}')">✏️ 修改</button>
+                            <button class="danger" style="padding:6px 10px; font-size:12px; margin:0;" onclick="delCourse('${c.id}')">🗑️ 删除</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+        }
+        function renderAll() { renderCourseList(); renderVisualGrid(); }
+
+        function copyWeekToNext() {
+            if(currWeekIdx >= semWeeks.length - 1) return alert("已经是最后一周，无法复制！");
+            if(!confirm("将会把本周【所有课程】作为「特定日期课程」复制到下一周，确定吗？")) return;
+            
+            let currW = semWeeks[currWeekIdx]; let nextW = semWeeks[currWeekIdx + 1];
+            let newClones = []; let colCount = cfg.showWeekend ? 7 : 5;
+
+            for(let i=0; i<colCount; i++) {
+                let cd = new Date(currW.startObj); cd.setDate(cd.getDate()+i); let cDStr = getStrDate(cd);
+                let nd = new Date(nextW.startObj); nd.setDate(nd.getDate()+i); let nDStr = getStrDate(nd);
+
+                for(let ds=1; ds<=cfg.dsCount; ds++) {
+                    let matches = getMatchedCourses(cDStr, ds, i+1, currW);
+                    matches.forEach(c => {
+                        let nextMatches = getMatchedCourses(nDStr, ds, i+1, nextW);
+                        if(!nextMatches.some(nx => nx.name === c.name && nx.type === c.type)) {
+                            let copy = JSON.parse(JSON.stringify(c)); copy.id = generateUUID();
+                            copy.isSpec = true; copy.dates = [nDStr]; copy.exdates = []; copy.isLocked = false;
+                            newClones.push(copy);
+                        }
+                    });
+                }
+            }
+            if(newClones.length > 0) { courses.push(...newClones); pushHistory(); renderAll(); alert(`✅ 成功复制了 ${newClones.length} 节课到下一周！`); }
+            else { alert("未找到可复制的新课程（可能下一周已经存在同样的课了）。"); }
+        }
+
+        function changeMonth(v) { calDate.setMonth(calDate.getMonth()+v); renderCal(); }
+        function renderCal() {
+            let y = calDate.getFullYear(), m = calDate.getMonth(); document.getElementById('calLabel').innerText = `${y} / ${(m+1).toString().padStart(2,'0')}`;
+            let grid = document.getElementById('calGrid'); grid.innerHTML = '';
+            let f = (new Date(y,m,1).getDay()||7)-1; let total = new Date(y,m+1,0).getDate();
+            for(let i=0; i<f; i++) grid.innerHTML += '<div></div>';
+            for(let d=1; d<=total; d++) {
+                let s = `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                let div = document.createElement('div'); div.className = 'cal-day' + (selDates.has(s)?' selected':'');
+                if(holidays.some(h=>h.date===s)) { div.classList.add('holiday'); div.title="公共假期"; }
+                div.innerText = d; div.onclick = () => { if(selDates.has(s)) selDates.delete(s); else selDates.add(s); renderCal(); upSel(); };
+                grid.appendChild(div);
+            }
+            upSel();
+        }
+        function upSel() { document.getElementById('selDates').innerHTML = Array.from(selDates).sort().map(d => `<span class="date-badge">🎯 ${d}</span>`).join('') || '<span style="color:#94a3b8;">尚未选择日期</span>'; }
+
+        function getMatchedCourses(dStr, dsIdx, dNum, wObj) {
+            if(holidays.find(h=>h.date===dStr)) return [];
+            return courses.filter(c => {
+                if(c.exdates && c.exdates.includes(dStr)) return false;
+                let isMatch = false;
+                if(c.tMode == dsIdx) isMatch = true;
+                else if (c.tMode === 'custom') {
+                    let cS = parseTime(c.ts); let cE = parseTime(c.te);
+                    if (cS !== null && cE !== null) {
+                        if (cE <= cS) cE += 1440; 
+                        let dS = dsTimes[dsIdx].sMin; let dE = dsTimes[dsIdx].eMin;
+                        if (cS < dE && cE > dS) isMatch = true; 
+                    }
+                }
+                if(!isMatch) return false;
+                if(c.isSpec) return c.dates.includes(dStr);
+                return (c.day === dNum) && (c.rule==='every' || (c.rule==='odd' && cfg.firstW!=='even' && wObj.isOdd) || (c.rule==='even' && cfg.firstW!=='odd' && !wObj.isOdd));
+            });
+        }
+
+        // ================= Drag & Drop =================
+        function allowDrop(ev) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; }
+        function drag(ev, id, dateStr, dsStr) { 
+            ev.dataTransfer.effectAllowed = 'move';
+            ev.dataTransfer.setData("id", id); ev.dataTransfer.setData("dateStr", dateStr); ev.dataTransfer.setData("dsStr", dsStr); 
+        }
+        function drop(ev, targetDsStr, targetDay) {
+            ev.preventDefault(); 
+            let id = ev.dataTransfer.getData("id"); let originDateStr = ev.dataTransfer.getData("dateStr"); let originDsStr = ev.dataTransfer.getData("dsStr");
+            let cIndex = courses.findIndex(x => String(x.id) === String(id)); if(cIndex === -1) return; let c = courses[cIndex];
+            if(c.isLocked) return alert("🔒 该课程已锁定，无法拖拽移动！");
+
+            let w = semWeeks[currWeekIdx]; let tD = new Date(w.startObj); tD.setDate(tD.getDate() + (targetDay - 1));
+            let targetDateStr = getStrDate(tD);
+            
+            if (originDateStr === targetDateStr && originDsStr === targetDsStr.toString()) return;
+
+            let newCourse = JSON.parse(JSON.stringify(c)); newCourse.id = generateUUID(); newCourse.isSpec = true; newCourse.dates = [targetDateStr]; newCourse.exdates = [];
+
+            if (c.tMode === 'custom') {
+                if (originDsStr !== targetDsStr.toString()) { newCourse.tMode = targetDsStr.toString(); delete newCourse.ts; delete newCourse.te; } 
+                else { newCourse.tMode = 'custom'; }
+            } else { newCourse.tMode = targetDsStr.toString(); }
+
+            if(c.isSpec) { c.dates = c.dates.filter(d => d !== originDateStr); if(c.dates.length === 0) courses.splice(cIndex, 1); } 
+            else { c.exdates = c.exdates || []; if(!c.exdates.includes(originDateStr)) c.exdates.push(originDateStr); }
+
+            courses.push(newCourse); pushHistory(); renderAll();
+        }
+
+        function handleCellClick(id) { selectedCourseId = String(id); renderVisualGrid(); }
+
+        function buildGridHTML(w) {
+            let html = ''; let dates = []; let colCount = cfg.showWeekend ? 7 : 5;
+            for(let i=0; i<colCount; i++) { let d = new Date(w.startObj); d.setDate(d.getDate()+i); dates.push(getStrDate(d)); }
+            
+            let todayStr = getStrDate(new Date());
+
+            for(let i=1; i<=cfg.dsCount; i++) {
+                html += `<tr><td class="time-col">${i}.DS<br><span style="font-weight:normal;font-size:11.5px;color:#94a3b8;">${dsTimes[i].s} - ${dsTimes[i].e}</span></td>`;
+                dates.forEach((dStr, dIdx) => {
+                    let isTodayClass = (dStr === todayStr) ? 'today-highlight' : '';
+                    html += `<td class="${isTodayClass}" 
+                                 ondragenter="allowDrop(event); this.classList.add('drag-over');" 
+                                 ondragover="allowDrop(event);" 
+                                 ondragleave="this.classList.remove('drag-over');" 
+                                 ondrop="this.classList.remove('drag-over'); drop(event, '${i}', ${dIdx+1})" 
+                                 ondblclick="quickAddCourse('${dStr}', '${i}', ${dIdx+1})">`;
+                    
+                    let hol = holidays.find(h=>h.date===dStr);
+                    if(hol) { html += `<div style="text-align:center; color:#ef4444; font-weight:bold; margin-top:25px; font-size:14px; opacity:0.8;">🏖️ ${hol.remark}</div></td>`; return; }
+
+                    let matches = getMatchedCourses(dStr, i, dIdx+1, w);
+                    matches.forEach(c => {
+                        let isC = c.tMode === 'custom'; let color = getCourseColor(c.name); let isSel = (String(c.id) === String(selectedCourseId));
+                        html += `<div class="cell-item ${isSel?'selected':''} ${c.isLocked?'locked':''}" draggable="${!c.isLocked}" ondragstart="drag(event, '${c.id}', '${dStr}', '${i}')" 
+                                      onclick="handleCellClick('${c.id}')" ondblclick="event.stopPropagation(); editCourse('${c.id}')"
+                                      style="background-color: ${color.bg}; border-left: 5px solid ${color.border};">
+                            ${c.isLocked ? '<span class="lock-icon">🔒</span>' : ''}
+                            <b style="color:${color.text};">${isC ? `<span style="font-weight:normal; opacity:0.8;">${c.ts}-${c.te}</span> ` : ''}${c.name} (${c.type})</b>
+                            <small>${c.teacher ? '👤 '+c.teacher : ''} ${c.loc ? '📍 '+c.loc : ''}</small>
+                        </div>`;
+                    });
+                    html += `</td>`;
+                });
+                html += `</tr>`;
+            }
+            return html;
+        }
+
+        function renderVisualGrid() {
+            if(!semWeeks.length) return; let w = semWeeks[currWeekIdx];
+            
+            let tagStr = cfg.weekTags && cfg.weekTags[w.idx] ? `<span class="week-tag-badge">🏷️ ${cfg.weekTags[w.idx]}</span>` : '';
+            document.getElementById('pdfWeekSub').innerHTML = `KW ${w.idx} | ${w.isOdd?'1. Woche (Ungerade)':'2. Woche (Gerade)'} | ${w.startStr} - ${w.endStr} ${tagStr}`;
+            
+            let todayStr = getStrDate(new Date());
+            let h = '<th>Zeit</th>'; let names = cfg.showWeekend ? ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] : ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
+            names.forEach((n,i)=>{ 
+                let d = new Date(w.startObj); d.setDate(d.getDate()+i); 
+                let dStr = getStrDate(d);
+                let isTodayClass = (dStr === todayStr) ? 'class="today-highlight"' : '';
+                h += `<th ${isTodayClass}>${n}<br><span style="font-weight:normal;font-size:12px;color:#94a3b8;">${getStrShort(d)}</span></th>`; 
+            });
+            document.getElementById('gridHead').innerHTML = h; document.getElementById('gridBody').innerHTML = buildGridHTML(w);
+            document.getElementById('pdfBigTitle').innerText = `Studienjahresablaufplan ${cfg.sem} ${cfg.year}`;
+        }
+
+        function getScale() { return Math.max(2, window.devicePixelRatio || 1); }
+
+        async function exportImage(mode) {
+            if(!courses.length) return alert('课表为空！'); let container = document.getElementById('pngCaptureArea');
+            if(mode === 'current') {
+                selectedCourseId = null; renderVisualGrid();
+                html2canvas(container, { scale: getScale(), backgroundColor: "#f8fafc" }).then(canvas => { let link = document.createElement('a'); link.download = `Stundenplan_KW${currWeekIdx+1}.png`; link.href = canvas.toDataURL("image/png"); link.click(); });
+            } else if (mode === 'all') {
+                selectedCourseId = null; let origIdx = currWeekIdx; let zip = new JSZip(); document.getElementById('loadingOverlay').style.display = 'flex';
+                for(let i=0; i<semWeeks.length; i++) {
+                    currWeekIdx = i; renderVisualGrid(); document.getElementById('loadingText').innerText = `生成图片 ${i+1}/${semWeeks.length}`; await new Promise(r => setTimeout(r, 200));
+                    let cvs = await html2canvas(container, { scale: getScale(), backgroundColor: "#f8fafc", logging: false }); zip.file(`KW${i+1}.png`, cvs.toDataURL('image/png').split(',')[1], {base64: true});
+                }
+                zip.generateAsync({type:"blob"}).then(content => { saveAs(content, `Stundenplan_All.zip`); document.getElementById('loadingOverlay').style.display = 'none'; currWeekIdx = origIdx; renderVisualGrid(); });
+            }
+        }
+
+        async function exportPDF(mode) {
+            if(!courses.length) return alert('空课表！'); if (!window.jspdf) return alert('PDF库加载中，请稍后重试...');
+            selectedCourseId = null; const { jsPDF } = window.jspdf; const pdf = new jsPDF('l', 'mm', 'a4'); const pdfW = pdf.internal.pageSize.getWidth(), pdfH = pdf.internal.pageSize.getHeight();
+            let origIdx = currWeekIdx; let targets = mode==='current' ? [currWeekIdx] : semWeeks.map((_,i)=>i);
+            
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            for(let k=0; k<targets.length; k++) {
+                currWeekIdx = targets[k]; renderVisualGrid(); document.getElementById('loadingText').innerText = `生成 PDF ${k+1}/${targets.length}`; await new Promise(r => setTimeout(r, 200));
+                let canvas = await html2canvas(document.getElementById('pngCaptureArea'), { scale: getScale(), backgroundColor: "#f8fafc", logging: false });
+                let imgData = canvas.toDataURL('image/jpeg', 0.98); let props = pdf.getImageProperties(imgData); let ratio = props.width / props.height;
+                let margin = 10, maxW = pdfW - margin * 2, maxH = pdfH - margin * 2; let renderW = maxW, renderH = renderW / ratio; if (renderH > maxH) { renderH = maxH; renderW = renderH * ratio; }
+                if (k > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', (pdfW - renderW)/2, (pdfH - renderH)/2, renderW, renderH);
+            }
+            pdf.save(`Stundenplan_${cfg.sem}.pdf`); currWeekIdx = origIdx; renderVisualGrid(); document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        function exportICS() {
+            let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//UniSchedule Pro V3.6//ZH\r\n";
+            let dStr = getStrDate(new Date(cfg.startObj.getTime() - 86400000)).replace(/-/g,'');
+            
+            let backup = { cfg, courses, holidays, version: VERSION }; 
+            let remark = encodeBase64(backup);
+            ics += `BEGIN:VEVENT\r\nSUMMARY:Semesterbeginn morgen! (${cfg.uni})\r\nDTSTART;VALUE=DATE:${dStr}\r\nDESCRIPTION:CONFIG_START:${remark}:CONFIG_END\r\nEND:VEVENT\r\n`;
+
+            courses.forEach(c => {
+                let tS, tE;
+                if(c.tMode==='custom') { tS = c.ts.replace(':','')+'00'; tE = c.te.replace(':','')+'00'; }
+                else { tS = dsTimes[c.tMode].s.replace(':','')+'00'; tE = dsTimes[c.tMode].e.replace(':','')+'00'; }
+
+                const wrap = (d, r='', ex='') => `BEGIN:VEVENT\r\nSUMMARY:${c.name} (${c.type})\r\nDTSTART;TZID=${cfg.tz}:${d}T${tS}\r\nDTEND;TZID=${cfg.tz}:${d}T${tE}\r\nDESCRIPTION:Teacher: ${c.teacher||''}\\nLoc: ${c.loc||''}\r\n${r}${ex}END:VEVENT\r\n`;
+
+                if(c.isSpec) {
+                    c.dates.forEach(d => { if(!holidays.some(h=>h.date===d)) ics += wrap(d.replace(/-/g,'')); });
+                } else {
+                    let f = new Date(cfg.startObj); f.setDate(f.getDate() + (c.day-1)); let fwOdd = (cfg.firstW === 'odd');
+                    if((c.rule==='odd'&&!fwOdd) || (c.rule==='even'&&fwOdd)) f.setDate(f.getDate()+7);
+                    
+                    let r = `RRULE:FREQ=WEEKLY;INTERVAL=${c.rule==='every'?1:2};UNTIL=${cfg.end.replace(/-/g,'')}T235959\r\n`;
+                    let allEx = [...holidays.map(h=>h.date)]; if(c.exdates) allEx = [...allEx, ...c.exdates];
+                    let ex = allEx.length ? `EXDATE;TZID=${cfg.tz}:${allEx.map(d=>d.replace(/-/g,'')+`T${tS}`).join(',')}\r\n` : '';
+                    ics += wrap(getStrDate(f).replace(/-/g,''), r, ex);
+                }
+            });
+            ics += "END:VCALENDAR"; let link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([ics])); link.download = cfg.uni+"_Backup.ics"; link.click();
+        }
+
+        function encodeBase64(obj) { return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); }
+        function decodeBase64(str) { return JSON.parse(decodeURIComponent(escape(atob(str)))); }
+
+        document.getElementById('icsImport').addEventListener('change', (e)=>{
+            let r = new FileReader(); r.onload = (ev)=>{
+                let m = ev.target.result.match(/CONFIG_START:(.*):CONFIG_END/);
+                if(m) { try { loadStateToUI(decodeBase64(m[1])); alert("✅ 成功恢复！"); } catch(err) { alert("❌ 数据解析失败。"); } } else alert("❌ 无效备份文件。");
+            }; r.readAsText(e.target.files[0]);
+        });
+    </script>
+</body>
+</html>
